@@ -46,7 +46,11 @@ class Perceptron(LinearModel):
         y_i (scalar): the gold label for that example
         other arguments are ignored
         """
-        raise NotImplementedError # Q1.1 (a)
+        # Q1.1 (a)
+        y_hat = self.predict(x_i)
+        if y_hat != y_i:
+            self.W[y_i] += x_i
+            self.W[y_hat] -= x_i
 
 
 class LogisticRegression(LinearModel):
@@ -56,18 +60,41 @@ class LogisticRegression(LinearModel):
         y_i: the gold label for that example
         learning_rate (float): keep it at the default value for your plots
         """
-        raise NotImplementedError # Q1.2 (a,b)
+        # Q1.2 (a,b)
+        scores = np.dot(self.W, x_i)
+        exps = np.exp(scores - np.max(scores, axis=0, keepdims=True))
+        probs = exps / np.sum(exps)
+        one_hot = np.zeros_like(probs)
+        one_hot[y_i] += 1
+        grad_W = np.outer(probs - one_hot, x_i)
+        grad_W += l2_penalty * self.W
+        self.W -= learning_rate * grad_W
 
 
 class MLP(object):
     def __init__(self, n_classes, n_features, hidden_size):
         # Initialize an MLP with a single hidden layer.
-        raise NotImplementedError # Q1.3 (a)
+        # Q1.3 (a)
+        self.n_classes = n_classes
+        self.hidden_size = hidden_size
+        self.n_features = n_features
+
+        self.W1 = np.random.normal(0.1, 0.1, (hidden_size, n_features))
+        self.b1 = np.zeros(hidden_size)
+        self.W2 = np.random.normal(0.1, 0.1, (n_classes, hidden_size))
+        self.b2 = np.zeros(n_classes)
 
     def predict(self, X):
         # Compute the forward pass of the network. At prediction time, there is
         # no need to save the values of hidden nodes.
-        raise NotImplementedError # Q1.3 (a)
+        # Q1.3 (a)
+        z1 = np.dot(self.W1, X.T) + self.b1[:, np.newaxis] # (hidden_size, n_examples)
+        h1 = np.maximum(z1, 0) # ReLU
+        z2 = np.dot(self.W2, h1) + self.b2[:, np.newaxis] # (n_classes, n_examples)
+        # exps = np.exp(z2 - np.max(z2, axis=1, keepdims=True))
+        # probs = exps / np.sum(exps, axis=1, keepdims=True)
+        y_hat = z2.argmax(axis=0) # argmax(z) = argmax(softmax(z))
+        return y_hat
 
     def evaluate(self, X, y):
         """
@@ -84,7 +111,43 @@ class MLP(object):
         """
         Dont forget to return the loss of the epoch.
         """
-        raise NotImplementedError # Q1.3 (a)
+        # Q1.3 (a)
+        n_examples = X.shape[0]
+        loss = 0
+        epsilon = 1e-6
+
+        for i in range(n_examples):
+            x_i = X[i]
+            y_i = y[i]
+
+            z1 = np.dot(self.W1, x_i) + self.b1
+            h1 = np.maximum(z1, 0) # ReLU
+            z2 = np.dot(self.W2, h1) + self.b2
+
+            exps = np.exp(z2 - np.max(z2))
+            probs = exps / np.sum(exps)
+            loss_i = -np.log(probs[y_i] + epsilon)
+            loss += loss_i
+
+            y_one_hot = np.zeros_like(probs)
+            y_one_hot[y_i] += 1
+            grad_z2 = probs - y_one_hot
+
+            grad_W2 = np.outer(grad_z2, h1)
+            grad_b2 = grad_z2
+
+            grad_h1 = np.dot(self.W2.T, grad_z2)
+            grad_z1 = grad_h1 * (z1 > 0)
+
+            grad_W1 = np.outer(grad_z1, x_i)
+            grad_b1 = grad_z1
+
+            self.W1 -= learning_rate * grad_W1
+            self.b1 -= learning_rate * grad_b1
+            self.W2 -= learning_rate * grad_W2
+            self.b2 -= learning_rate * grad_b2
+        
+        return loss / n_examples
 
 
 def plot(epochs, train_accs, val_accs, filename=None):

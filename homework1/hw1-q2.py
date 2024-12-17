@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 import time
 import utils
 
-
+# python hw1-q2.py logistic_regression -batch_size 32 -l2_decay 0.01 -epochs 100 -learning_rate 0.1
 class LogisticRegression(nn.Module):
 
     def __init__(self, n_classes, n_features, **kwargs):
@@ -29,6 +29,7 @@ class LogisticRegression(nn.Module):
         super().__init__()
         # In a pytorch module, the declarations of layers needs to come after
         # the super __init__ line, otherwise the magic doesn't work.
+        self.linear = nn.Linear(n_features, n_classes, bias=True)
 
     def forward(self, x, **kwargs):
         """
@@ -44,7 +45,8 @@ class LogisticRegression(nn.Module):
         forward pass -- this is enough for it to figure out how to do the
         backward pass.
         """
-        raise NotImplementedError
+        logits = self.linear(x)
+        return logits
 
 
 class FeedforwardNetwork(nn.Module):
@@ -64,8 +66,16 @@ class FeedforwardNetwork(nn.Module):
         includes modules for several activation functions and dropout as well.
         """
         super().__init__()
-        # Implement me!
-        raise NotImplementedError
+
+        hidden_layers = []
+        for _ in range(layers):
+            hidden_layers.append(nn.Linear(n_features, hidden_size))
+            n_features = hidden_size
+        self.hidden_layers = nn.ModuleList(hidden_layers)
+
+        self.output_layer = nn.Linear(hidden_size, n_classes)
+        self.activation = {"tanh": nn.Tanh(), "relu": nn.ReLU()}[activation_type]
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, **kwargs):
         """
@@ -75,7 +85,11 @@ class FeedforwardNetwork(nn.Module):
         the output logits from x. This will include using various hidden
         layers, pointwise nonlinear functions, and dropout.
         """
-        raise NotImplementedError
+        for layer in self.hidden_layers:
+            x = self.activation(layer(x))
+            x = self.dropout(x)
+        logits = self.output_layer(x)
+        return logits
 
 
 def train_batch(X, y, model, optimizer, criterion, **kwargs):
@@ -96,7 +110,13 @@ def train_batch(X, y, model, optimizer, criterion, **kwargs):
     This function should return the loss (tip: call loss.item()) to get the
     loss as a numerical value that is not part of the computation graph.
     """
-    raise NotImplementedError
+    model.train()
+    optimizer.zero_grad()
+    logits = model(X)
+    loss = criterion(logits, y)
+    loss.backward()
+    optimizer.step()
+    return loss.item()
 
 
 def predict(model, X):
