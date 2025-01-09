@@ -23,23 +23,28 @@ class ConvBlock(nn.Module):
             padding=None,
             maxpool=True,
             batch_norm=True,
-            dropout=0.0
+            dropout=0.1
         ):
         super().__init__()
 
         # Q2.1. Initialize convolution, maxpool, activation and dropout layers 
-        
-        
-        # Q2.2 Initialize batchnorm layer 
-        
-        raise NotImplementedError
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=padding)
+        self.activation = nn.ReLU()
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2) if maxpool else nn.Identity()
+        self.dropout = nn.Dropout2d(dropout)
+
+        # Q2.2 Initialize batchnorm layer
+        # self.batch_norm = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
 
     def forward(self, x):
         # input for convolution is [b, c, w, h]
-        
         # Implement execution of layers in right order
-
-        raise NotImplementedError
+        x = self.conv(x)
+        # x = self.batch_norm(x)
+        x = self.activation(x)
+        x = self.maxpool(x)
+        x = self.dropout(x)
+        return x
 
 
 class CNN(nn.Module):
@@ -50,27 +55,53 @@ class CNN(nn.Module):
         fc2_out_dim = 512
         self.maxpool = maxpool
         self.batch_norm = batch_norm
+        num_classes = 6
 
         # Initialize convolutional blocks
-        
+        self.conv1 = ConvBlock(channels[0], channels[1], kernel_size=3, padding=1, maxpool=maxpool, batch_norm=batch_norm, dropout=dropout_prob)
+        self.conv2 = ConvBlock(channels[1], channels[2], kernel_size=3, padding=1, maxpool=maxpool, batch_norm=batch_norm, dropout=dropout_prob)
+        self.conv3 = ConvBlock(channels[2], channels[3], kernel_size=3, padding=1, maxpool=maxpool, batch_norm=batch_norm, dropout=dropout_prob)
+
+        self.flatten = nn.Flatten()
+
         # Initialize layers for the MLP block
+        self.fc1 = nn.Linear(channels[3] * 6 * 6, fc1_out_dim)
+        self.fc1_activation = nn.ReLU()
+        self.fc1_dropout = nn.Dropout(dropout_prob)
+
+        self.fc2 = nn.Linear(fc1_out_dim, fc2_out_dim)
+        self.fc2_activation = nn.ReLU()
+
+        self.fc3 = nn.Linear(fc2_out_dim, num_classes)
+
         # For Q2.2 initalize batch normalization
-        
 
     def forward(self, x):
         x = x.reshape(x.shape[0], 3, 48, -1)
 
-        # Implement execution of convolutional blocks 
-        
+        # Implement execution of convolutional blocks
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+
         # Flattent output of the last conv block
-        
+        x = self.flatten(x)
+
         # Implement MLP part
-        
+        x = self.fc1(x)
+        x = self.fc1_activation(x)
+        x = self.fc1_dropout(x)
+
+        x = self.fc2(x)
+        x = self.fc2_activation(x)
+
+        x = self.fc3(x)
+
         # For Q2.2 implement global averag pooling
         
 
         return F.log_softmax(x, dim=1)
- 
+
 
 def train_batch(X, y, model, optimizer, criterion, **kwargs):
     """
