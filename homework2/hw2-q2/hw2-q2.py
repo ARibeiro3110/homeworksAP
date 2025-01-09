@@ -13,6 +13,7 @@ import numpy as np
 
 import utils
 
+Q2_2 = True
 
 class ConvBlock(nn.Module):
     def __init__(
@@ -23,7 +24,7 @@ class ConvBlock(nn.Module):
             padding=None,
             maxpool=True,
             batch_norm=True,
-            dropout=0.1
+            dropout=0.0
         ):
         super().__init__()
 
@@ -34,13 +35,13 @@ class ConvBlock(nn.Module):
         self.dropout = nn.Dropout2d(dropout)
 
         # Q2.2 Initialize batchnorm layer
-        # self.batch_norm = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
+        if Q2_2: self.batch_norm = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
 
     def forward(self, x):
         # input for convolution is [b, c, w, h]
         # Implement execution of layers in right order
         x = self.conv(x)
-        # x = self.batch_norm(x)
+        if Q2_2: x = self.batch_norm(x)
         x = self.activation(x)
         x = self.maxpool(x)
         x = self.dropout(x)
@@ -62,11 +63,15 @@ class CNN(nn.Module):
         self.conv2 = ConvBlock(channels[1], channels[2], kernel_size=3, padding=1, maxpool=maxpool, batch_norm=batch_norm, dropout=dropout_prob)
         self.conv3 = ConvBlock(channels[2], channels[3], kernel_size=3, padding=1, maxpool=maxpool, batch_norm=batch_norm, dropout=dropout_prob)
 
-        self.flatten = nn.Flatten()
+        # For Q2.2 initalize batch normalization
+        if Q2_2: self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
 
+        self.flatten = nn.Flatten()
+        
         # Initialize layers for the MLP block
-        self.fc1 = nn.Linear(channels[3] * 6 * 6, fc1_out_dim)
+        self.fc1 = nn.Linear(channels[3] * (1 if Q2_2 else 6 * 6), fc1_out_dim)
         self.fc1_activation = nn.ReLU()
+        if Q2_2: self.fc1_batch_norm = nn.BatchNorm1d(fc1_out_dim) if batch_norm else nn.Identity()
         self.fc1_dropout = nn.Dropout(dropout_prob)
 
         self.fc2 = nn.Linear(fc1_out_dim, fc2_out_dim)
@@ -74,7 +79,6 @@ class CNN(nn.Module):
 
         self.fc3 = nn.Linear(fc2_out_dim, num_classes)
 
-        # For Q2.2 initalize batch normalization
 
     def forward(self, x):
         x = x.reshape(x.shape[0], 3, 48, -1)
@@ -84,21 +88,22 @@ class CNN(nn.Module):
         x = self.conv2(x)
         x = self.conv3(x)
 
+        # For Q2.2 implement global averag pooling
+        if Q2_2: x = self.global_avg_pool(x)
+
         # Flattent output of the last conv block
         x = self.flatten(x)
 
         # Implement MLP part
         x = self.fc1(x)
         x = self.fc1_activation(x)
+        if Q2_2: x = self.fc1_batch_norm(x)
         x = self.fc1_dropout(x)
 
         x = self.fc2(x)
         x = self.fc2_activation(x)
 
         x = self.fc3(x)
-
-        # For Q2.2 implement global averag pooling
-        
 
         return F.log_softmax(x, dim=1)
 
@@ -154,7 +159,7 @@ def plot(epochs, plottable, ylabel='', name=''):
 
 
 def get_number_trainable_params(model):
-    raise NotImplementedError
+    return sum([np.prod(p.size()) for p in model.parameters() if p.requires_grad])
 
 
 def plot_file_name_sufix(opt, exlude):
