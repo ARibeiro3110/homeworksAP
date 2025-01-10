@@ -23,6 +23,7 @@ class BahdanauAttention(nn.Module):
         self.W_h = nn.Linear(hidden_size, hidden_size, bias=False)
         self.W_s = nn.Linear(hidden_size, hidden_size, bias=False)
         self.v = nn.Linear(hidden_size, 1, bias=False)
+        self.W_out = nn.Linear(2 * hidden_size, hidden_size, bias=False)
 
     def forward(self, query, encoder_outputs, src_lengths):
         """
@@ -32,18 +33,21 @@ class BahdanauAttention(nn.Module):
         Returns:
             attn_out:   (batch_size, max_tgt_len, hidden_size) - attended vector
         """
-        w_h_enc = self.W_h(encoder_outputs).unsqueeze(1)
-        w_s_dec = self.W_s(query).unsqueeze(2)
+        _, max_tgt_len, _ = query.size()
+        query_expanded = query.unsqueeze(2)
+        enc_expanded = encoder_outputs.unsqueeze(1)
 
-        scores = torch.tanh(w_h_enc + w_s_dec)
-        scores = self.v(scores).squeeze(-1)
-
+        Wh_enc = self.W_h(enc_expanded)
+        Ws_query = self.W_s(query_expanded)
+        scores = self.v(torch.tanh(Wh_enc + Ws_query)).squeeze(-1)
         mask = self.sequence_mask(src_lengths).unsqueeze(1)
-        scores = scores.masked_fill(~mask, float('-inf'))
+        mask = mask.repeat(1, max_tgt_len, 1)
+        scores.masked_fill_(~mask, float("-inf"))
 
-        attn_weights = nn.functional.softmax(scores, dim=-1)
-
-        attn_out = torch.einsum("bts,bsh->bth", attn_weights, encoder_outputs)
+        attn_weights = torch.softmax(scores, dim=-1)
+        context = torch.bmm(attn_weights, encoder_outputs)
+        combined = torch.cat((context, query), dim=-1)
+        attn_out = torch.tanh(self.W_out(combined))
         return attn_out
 
     def sequence_mask(self, lengths):
@@ -103,11 +107,11 @@ class Encoder(nn.Module):
 
         packed = pack(embedded, lengths.cpu(), batch_first=True, enforce_sorted=False)
         packed_outputs, final_hidden = self.lstm(packed)
-        outputs, _ = unpack(packed_outputs, batch_first=True)
+        enc_output, _ = unpack(packed_outputs, batch_first=True)
 
-        outputs = self.dropout(outputs)
+        enc_output = self.dropout(enc_output)
 
-        return outputs, final_hidden
+        return enc_output, final_hidden
         #############################################
         # END OF YOUR CODE
         #############################################
@@ -176,13 +180,12 @@ class Decoder(nn.Module):
         #         src_lengths,
         #     )
         #############################################
-        emb = self.dropout(self.embedding(tgt))
-        outputs, dec_state = self.lstm(emb, dec_state)
+        embedded = self.dropout(self.embedding(tgt))
+        outputs, dec_state = self.lstm(embedded, dec_state)
 
         if self.attn is not None:
-            context = self.attn(outputs, encoder_outputs, src_lengths)
-            outputs = torch.tanh(context)
-        
+            outputs = self.attn(outputs, encoder_outputs, src_lengths)
+
         outputs = self.dropout(outputs)
 
         return outputs, dec_state
