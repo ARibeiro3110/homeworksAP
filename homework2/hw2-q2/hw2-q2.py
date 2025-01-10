@@ -13,7 +13,7 @@ import numpy as np
 
 import utils
 
-Q2_2 = True
+Q2_2 = True # Set to True to enable batch normalization and global average pooling
 
 class ConvBlock(nn.Module):
     def __init__(
@@ -32,7 +32,7 @@ class ConvBlock(nn.Module):
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=padding)
         self.activation = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2) if maxpool else nn.Identity()
-        self.dropout = nn.Dropout2d(dropout)
+        self.dropout = nn.Dropout(dropout)
 
         # Q2.2 Initialize batchnorm layer
         if Q2_2: self.batch_norm = nn.BatchNorm2d(out_channels) if batch_norm else nn.Identity()
@@ -63,10 +63,8 @@ class CNN(nn.Module):
         self.conv2 = ConvBlock(channels[1], channels[2], kernel_size=3, padding=1, maxpool=maxpool, batch_norm=batch_norm, dropout=dropout_prob)
         self.conv3 = ConvBlock(channels[2], channels[3], kernel_size=3, padding=1, maxpool=maxpool, batch_norm=batch_norm, dropout=dropout_prob)
 
-        # For Q2.2 initalize batch normalization
-        if Q2_2: self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-
         self.flatten = nn.Flatten()
+        if Q2_2: self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         
         # Initialize layers for the MLP block
         self.fc1 = nn.Linear(channels[3] * (1 if Q2_2 else 6 * 6), fc1_out_dim)
@@ -88,10 +86,10 @@ class CNN(nn.Module):
         x = self.conv2(x)
         x = self.conv3(x)
 
-        # For Q2.2 implement global averag pooling
-        if Q2_2: x = self.global_avg_pool(x)
+        # For Q2.2 implement global average pooling
+        if Q2_2:
+            x = self.global_avg_pool(x)
 
-        # Flattent output of the last conv block
         x = self.flatten(x)
 
         # Implement MLP part

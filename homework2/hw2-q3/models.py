@@ -20,8 +20,9 @@ class BahdanauAttention(nn.Module):
 
     def __init__(self, hidden_size):
         super(BahdanauAttention, self).__init__()
-        
-        raise NotImplementedError("Add your implementation.")
+        self.W_h = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.W_s = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.v = nn.Linear(hidden_size, 1, bias=False)
 
     def forward(self, query, encoder_outputs, src_lengths):
         """
@@ -31,8 +32,19 @@ class BahdanauAttention(nn.Module):
         Returns:
             attn_out:   (batch_size, max_tgt_len, hidden_size) - attended vector
         """
+        w_h_enc = self.W_h(encoder_outputs).unsqueeze(1)
+        w_s_dec = self.W_s(query).unsqueeze(2)
 
-        raise NotImplementedError("Add your implementation.")
+        scores = torch.tanh(w_h_enc + w_s_dec)
+        scores = self.v(scores).squeeze(-1)
+
+        mask = self.sequence_mask(src_lengths).unsqueeze(1)
+        scores = scores.masked_fill(~mask, float('-inf'))
+
+        attn_weights = nn.functional.softmax(scores, dim=-1)
+
+        attn_out = torch.einsum("bts,bsh->bth", attn_weights, encoder_outputs)
+        return attn_out
 
     def sequence_mask(self, lengths):
         """
@@ -87,15 +99,21 @@ class Encoder(nn.Module):
         # - Use torch.nn.utils.rnn.pad_packed_sequence to unpack the packed sequences
         #   (after passing them to the LSTM)
         #############################################
-        
+        embedded = self.dropout(self.embedding(src))
 
+        packed = pack(embedded, lengths.cpu(), batch_first=True, enforce_sorted=False)
+        packed_outputs, final_hidden = self.lstm(packed)
+        outputs, _ = unpack(packed_outputs, batch_first=True)
+
+        outputs = self.dropout(outputs)
+
+        return outputs, final_hidden
         #############################################
         # END OF YOUR CODE
         #############################################
         # enc_output: (batch_size, max_src_len, hidden_size)
         # final_hidden: tuple with 2 tensors
         # each tensor is (num_layers * num_directions, batch_size, hidden_size)
-        raise NotImplementedError("Add your implementation.")
 
 
 class Decoder(nn.Module):
@@ -158,15 +176,22 @@ class Decoder(nn.Module):
         #         src_lengths,
         #     )
         #############################################
-        
+        emb = self.dropout(self.embedding(tgt))
+        outputs, dec_state = self.lstm(emb, dec_state)
 
+        if self.attn is not None:
+            context = self.attn(outputs, encoder_outputs, src_lengths)
+            outputs = torch.tanh(context)
+        
+        outputs = self.dropout(outputs)
+
+        return outputs, dec_state
         #############################################
         # END OF YOUR CODE
         #############################################
         # outputs: (batch_size, max_tgt_len, hidden_size)
         # dec_state: tuple with 2 tensors
         # each tensor is (num_layers, batch_size, hidden_size)
-        raise NotImplementedError("Add your implementation.")
 
 
 class Seq2Seq(nn.Module):
